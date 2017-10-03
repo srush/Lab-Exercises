@@ -13,14 +13,20 @@ gloveModel = "glove.6B.50d.txt"
 def loadGloveModel(gloveFile):
     print ("Loading Glove Model")
     f = open(gloveFile,'r')
-    model, w2i = {}, {}
+    glove_weight = np.array([])
+    i2w, w2i = {}, {}
+    vocab_size = 0
     for line in f:
         splitLine = line.split()
         word = splitLine[0]
         embedding = np.array([float(val) for val in splitLine[1:]])
-        model[word] = embedding
-    print ("Done.",len(model)," words loaded!")
-    return  model, w2i
+        glove_weight = np.append(glove_weight, embedding)
+        i2w[vocab_size] = word
+        w2i[word] = vocab_size
+        vocab_size += 1
+
+    print ("Done.",vocab_size," words loaded!")
+    return  glove_weight, i2w, w2i
 
 def checkWordsInTrain(trainFile, dictionary):
     """ return list of words in training data that are not in dictionary"""
@@ -70,13 +76,13 @@ def getVocabSize(trainFile):
             
 
 # Load vector representation of words (GLOVE pretrained)
-glove = loadGloveModel(gloveModel)
+glove_weight, i2w, w2i = loadGloveModel(gloveModel)
 # dictionary: mapping words to vectors
 
 # Clean training data
 prepareTrainData(trainFile)
-deleteNewWords(trainFile, glove)
-assert(0 == len(checkWordsInTrain(trainFile, glove)))
+deleteNewWords(trainFile, w2i)
+assert(0 == len(checkWordsInTrain(trainFile, w2i)))
 
 print(getVocabSize(trainFile))
 
@@ -125,7 +131,7 @@ class LBL(nn.Module):
     def forward(self, context_vect):      
         return F.log_softmax(pytorch.mm(R, self.C(context_vect)) + self.bias)
 
-def make_context_vector(wordlist, dictionary):
+def make_context_vector(wordlist, dictionary): # TODO: change this
     embeddinglist = []
     for word in wordlist:
         embeddinglist += dictionary[word]
@@ -133,7 +139,7 @@ def make_context_vector(wordlist, dictionary):
     # 
     return vec #vec.view(1,-1)
 
-def make_target(word, dictionary):
+def make_target(word, dictionary):  # TODO:change this
     return torch.FlotTensor(dictionary[word])
 
 def print_params(model):
