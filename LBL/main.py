@@ -151,13 +151,13 @@ def make_context_vector(wordlist, w2i): # TODO: change this
     embeddinglist = []
     for word in wordlist:
 
-        embeddinglist.append(get_word_index(word))
+        embeddinglist.append(get_word_index(word, w2i))
     vec = torch.LongTensor(embeddinglist)
     # 
     return vec #vec.view(1,-1)
 
-def make_target(word):  # TODO:change this
-    return torch.LongTensor([get_word_index(word)])
+def make_target(word, w2i):  # TODO:change this
+    return torch.LongTensor([get_word_index(word, w2i)])
 
 def print_params(model):
     for param in model.parameters():
@@ -190,7 +190,7 @@ def train(R, trainFile, w2i, epochs=30, lr=0.01):
             
             # Step 2. Get intput and target
             context_vect = autograd.Variable(make_context_vector(word_list, w2i))
-            target = autograd.Variable(make_target(word))
+            target = autograd.Variable(make_target(word, w2i))
             
             # Step 3. Run forward pass
             log_probs = model(context_vect)
