@@ -8,33 +8,37 @@ import torch.optim as optim
 import numpy as np
 import re
 
+HIDDEN_LAYER_SIZE = 50
+CONTEXT_SIZE = 5
 
 trainFile = "train.txt"
 gloveModel = "glove.6B.50d.txt"
+VEC_SIZE = 50
 
 
 def loadGloveModel(gloveFile):
     print ("Loading Glove Model")
     f = open(gloveFile,'r')
     model = {}
+    # iterate through every word-vec representation
     for line in f:
+        # split and lower case inputs
         splitLine = line.split()
-        word = splitLine[0]
+        word = splitLine[0].lower()
         embedding = np.array([float(val) for val in splitLine[1:]])
         model[word] = embedding
-
     print ("Done.",len(model)," words loaded!")
-    return  model
+    return model
 
 def checkWordsInTrain(trainFile, dictionary):
-    """ return list of words in training data that are not in dictionary"""
+    """return list of words in training data that are not in dictionary"""
     f = open(trainFile, 'r')
     notfound = []
     for line in f:
         for word in line.split():
             if word not in dictionary:
                 notfound.append(word)
-    return notfound    
+    return notfound
 
 def prepareTrainData(trainFile):
     """1. lowercase everything
@@ -43,16 +47,15 @@ def prepareTrainData(trainFile):
     content = inputFile.read()
     inputFile.close()
     with open(trainFile, 'w') as outputFile:
-        # 1.
+        # clean training data
         lowercase = content.lower()
-        # 2.
         paddpunct = re.sub('(?<! )(?=[.,;:!?()-''])|(?<=[.,;:!?()-])(?! )', r' ', lowercase)
         outputFile.write(paddpunct)
     outputFile.close()
     return
 
 def deleteNewWords(trainFile, dictionary):
-    """ delete words not in dictionary"""
+    """delete words not in dictionary"""
     delete_list = checkWordsInTrain(trainFile, dictionary)
     inputFile = open(trainFile, 'r')
     lines = inputFile.readlines()
@@ -60,58 +63,42 @@ def deleteNewWords(trainFile, dictionary):
     outputFile = open(trainFile, 'w')
     for line in lines:
         for word in delete_list:
-            line = line.replace(word, "")
+            line = line.replace(word, "unk")
         outputFile.write(line)
     outputFile.close()
-    
+
 def getVocabSize(trainFile):
-    f = open(trainFile, 'r')
     d = {}
-    for line in f:
-        for word in line.split():
-            d[word] = 1
-    return len(d)
-            
-
-# Load vector representation of words (GLOVE pretrained)
-glove = loadGloveModel(gloveModel)
-# dictionary: mapping words to vectors
-
-# Clean training data
-prepareTrainData(trainFile)
-deleteNewWords(trainFile, glove)
-assert(0 == len(checkWordsInTrain(trainFile, glove)))
-
-print(getVocabSize(trainFile))
-
-def makeVecRepresentationMatrix(trainFile, dictionary):
-    """ Construct a tensor matrix with a vector representation of the words
-    in the vocab"""
-    R = torch.FloatTensor(getVocabSize(trainFile) + 1, 50)
-    f = open(trainFile, 'r')
-    d = {}
-    w2i, i2w = {}, {}
-    i = 0
-    for line in f:
-        for word in line.split():
-            if word not in d:
+    with open(trainFile, 'r') as f:
+        for line in f:
+            for word in line.split():
                 d[word] = 1
-                R[i] = torch.FloatTensor(dictionary[word])
-                w2i[word] = i
-                i2w[i] = word
-                i += 1
-    R[i] = torch.FloatTensor(dictionary["unk"])
-    w2i["unk"] = i
-    i2w[i] = "unk"
+    return len(d)
+
+def makeVecRepresentationMatrix(trainFile, word2vec, vocab_size):
+    """Construct a tensor matrix with a vector representation of the words
+    in the vocab"""
+    R = torch.FloatTensor(vocab_size, VEC_SIZE)
+    with open(trainFile, 'r') as f:
+        # lookup table
+        d = {}
+        w2i, i2w = {}, {}
+        i = 0
+        for line in f:
+            for word in line.split():
+                if word not in d:
+                    d[word] = 1
+                    R[i] = torch.FloatTensor(word2vec[word])
+                    w2i[word] = i
+                    i2w[i] = word
+                    i += 1
+        R[i] = torch.FloatTensor(word2vec["unk"])
+        w2i["unk"] = i
+        i2w[i] = "unk"
     return R, w2i, i2w
 
-R, w2i, i2w = makeVecRepresentationMatrix(trainFile, glove)
 
-VOCAB_SIZE = getVocabSize(trainFile) + 1 # +1 unk
-HIDDEN_LAYER_SIZE = 50
-CONTEXT_SIZE = 5
-
-class LBL(nn.Module):  
+class LBL(nn.Module):
 
     def __init__(self, vocab_size, hid_layer_size, context_size, R):
         super(LBL, self).__init__()
@@ -130,7 +117,7 @@ class LBL(nn.Module):
 
         self.init_weight(R)
         self.R = autograd.Variable(R)
-    
+
     def get_train_parameters(self):
         params = []
         for param in self.parameters():
@@ -139,11 +126,11 @@ class LBL(nn.Module):
         return params
 
     def init_weight(self, glove_weight):
-    	assert(glove_weight.size() == (self.vocab_size, self.hid_layer_size))
+        assert(glove_weight.size() == (self.vocab_size, self.hid_layer_size))
         self.word_embeds.weight.data.copy_(glove_weight)
         self.word_embeds.weight.requires_grad = False
 
-    def forward(self, context_vect):   
+    def forward(self, context_vect):
         context_vect = self.word_embeds(context_vect)
         context_vect = context_vect.view(1, self.context_size * self.hid_layer_size)
         model_vect = self.C(context_vect).view(self.hid_layer_size, 1)
@@ -151,7 +138,7 @@ class LBL(nn.Module):
         final_vect = F.log_softmax(final_vect).view(1, self.vocab_size)
         return final_vect
 
-def make_context_vector(wordlist, w2i): # TODO: change this
+def make_context_vector(wordlist, w2i):
     unknown = "unk"
     embeddinglist = []
     for word in wordlist:
@@ -162,7 +149,7 @@ def make_context_vector(wordlist, w2i): # TODO: change this
     vec = torch.LongTensor(embeddinglist)
     return vec #vec.view(1,-1)
 
-def make_target(word, w2i):  # TODO:change this
+def make_target(word, w2i):
     unknown = "unk"
     if word in w2i:
         return torch.LongTensor([w2i[word]])
@@ -175,7 +162,7 @@ def print_params(model):
 
 def test(testFile, model):
     """Return - log likelihood of the training data set base on the model"""
-    loss_function = nn.NLLLoss() 
+    loss_function = nn.NLLLoss()
     tot_loss = 0
 
     f = open(trainFile, 'r')
@@ -186,11 +173,11 @@ def test(testFile, model):
         if len(word_list) < CONTEXT_SIZE:
             word_list.append(word)
             continue
-        
+
         # Step 1. Get intput and target
         context_vect = autograd.Variable(make_context_vector(word_list, w2i))
         target = autograd.Variable(make_target(word, w2i)).view(1)
-        
+
         # Step 2. Run forward pass
         log_probs = model(context_vect)
 
@@ -203,50 +190,69 @@ def test(testFile, model):
         word_list.append(word)
 
     f.close()
-    return tot_loss
+    return tot_loss.data
 
-        
+
 def train(R, trainFile, w2i, epochs=30, lr=0.01):
     """Train model with trainFile"""
     model = LBL(VOCAB_SIZE, HIDDEN_LAYER_SIZE, CONTEXT_SIZE, R)
 
-    loss_function = nn.NLLLoss() 
+    loss_function = nn.NLLLoss()
     optimizer = optim.SGD(model.get_train_parameters(), lr = 0.01)
 
     for epoch in range(30):
-        f = open(trainFile, 'r')
-        text = f.read()
-        word_list = []
-        i = 0
-        for word in text:
-            i += 1
-            if i % 1000 == 0:
-                print("epoch=%d, word=%d/%d\n" % (epoch, i, len(text)))
-            # Continue until we see at least conext_size words
-            if len(word_list) < CONTEXT_SIZE:
+        with open(trainFile, 'r') as f:
+            text = f.read()
+            word_list = []
+            i = 0
+            total_loss = 0
+            for word in text:
+                i += 1
+                if i % 1000 == 0:
+                    print("epoch=%d, word=%d/%d\n" % (epoch, i, len(text)))
+                # Continue until we see at least conext_size words
+                if len(word_list) < CONTEXT_SIZE:
+                    word_list.append(word)
+                    continue
+
+                # Step 1. clear out gradients
+                model.zero_grad()
+
+                # Step 2. Get intput and target
+                context_vect = autograd.Variable(make_context_vector(word_list, w2i))
+                target = autograd.Variable(make_target(word, w2i)).view(1)
+
+                # Step 3. Run forward pass
+                log_probs = model(context_vect)
+
+                # Step 4. Compute loss, gradients and update parameters
+                loss = loss_function(log_probs, target)
+                loss.backward()
+                optimizer.step()
+                total_loss += loss
+                print(total_loss.data)
+
+                # Update the context vector
+                word_list.pop(0)
                 word_list.append(word)
-                continue
-            
-            # Step 1. clear out gradients
-            model.zero_grad()
-            
-            # Step 2. Get intput and target
-            context_vect = autograd.Variable(make_context_vector(word_list, w2i))
-            target = autograd.Variable(make_target(word, w2i)).view(1)
-            
-            # Step 3. Run forward pass
-            log_probs = model(context_vect)
+        print(total_loss.data)
 
-            # Step 4. Compute loss, gradients and update parameters
-            loss = loss_function(log_probs, target)
-            loss.backward()
-            optimizer.step()
-            
-            # Update the context vector
-            word_list.pop(0)
-            word_list.append(word)
-    f.close()
-    return model 
+    return model
 
-print("training")
+
+# Load vector representation of words (GLOVE pretrained)
+# a dictionary mapping words to vectors
+word2vec = loadGloveModel(gloveModel)
+
+# Clean training data
+prepareTrainData(trainFile)
+deleteNewWords(trainFile, word2vec)
+# checks if we preprocessing went well
+assert(0 == len(checkWordsInTrain(trainFile, word2vec)))
+# vocab size including unknown
+VOCAB_SIZE = getVocabSize(trainFile) + 1 # +1 unk
+print (VOCAB_SIZE)
+R, w2i, i2w = makeVecRepresentationMatrix(trainFile, word2vec, VOCAB_SIZE)
+
+print("training...")
 train(R, trainFile, w2i)
