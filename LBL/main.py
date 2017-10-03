@@ -139,17 +139,25 @@ class LBL(nn.Module):
     def forward(self, context_vect):      
         return F.log_softmax(pytorch.mm(R, self.C(context_vect)) + self.bias)
 
+
+def get_word_index(word, w2i):
+    if word not in w2i: 
+        return w2i["unk"]
+    else:
+        return w2i[word]
+
 def make_context_vector(wordlist, w2i): # TODO: change this
 
     embeddinglist = []
     for word in wordlist:
-        embeddinglist.append(w2i[word])
+
+        embeddinglist.append(get_word_index(word))
     vec = torch.LongTensor(embeddinglist)
     # 
     return vec #vec.view(1,-1)
 
 def make_target(word):  # TODO:change this
-    return torch.LongTensor([w2i[word]])
+    return torch.LongTensor([get_word_index(word)])
 
 def print_params(model):
     for param in model.parameters():
