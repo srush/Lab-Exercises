@@ -156,7 +156,6 @@ optimizer = optim.SGD(model.parameters(), lr = 0.01)
 
 
 for epoch in range(30):
->>>>>>> upstream/master
     f = open(trainFile, 'r')
     text = f.read()
     word_list = []
