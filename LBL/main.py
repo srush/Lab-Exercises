@@ -87,7 +87,7 @@ print(getVocabSize(trainFile))
 def makeVecRepresentationMatrix(trainFile, dictionary):
     """ Construct a tensor matrix with a vector representation of the words
     in the vocab"""
-    R = torch.FloatTensor(getVocabSize(trainFile), 50)
+    R = torch.FloatTensor(getVocabSize(trainFile) + 1, 50)
     f = open(trainFile, 'r')
     d = {}
     w2i, i2w = {}, {}
@@ -100,6 +100,9 @@ def makeVecRepresentationMatrix(trainFile, dictionary):
                 w2i[word] = i
                 i2w[i] = word
                 i += 1
+    R[i] = torch.FloatTensor(dictionary["unk"])
+    w2i[word] = i
+    i2w[i]
     return R, w2i, i2w
 
 R, w2i, i2w = makeVecRepresentationMatrix(trainFile, glove)
