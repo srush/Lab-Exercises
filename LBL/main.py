@@ -7,6 +7,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 import re
+from matplotlib import pyplot as plt
 
 HIDDEN_LAYER_SIZE = 50
 CONTEXT_SIZE = 5
@@ -139,7 +140,8 @@ class LBL(nn.Module):
         context_vect = context_vect.view(1, self.context_size * self.hid_layer_size)
         model_vect = self.C(context_vect).view(self.hid_layer_size, 1)
         final_vect = torch.mm(self.R, model_vect) + self.bias
-        final_vect = F.log_softmax(final_vect).view(1, self.vocab_size)
+        final_vect = F.log_softmax(final_vect.view(self.vocab_size))
+        final_vect = final_vect.view(1, self.vocab_size)
         return final_vect
 
 def make_context_vector(wordlist, w2i):
@@ -155,6 +157,7 @@ def make_context_vector(wordlist, w2i):
 
 def make_target(word, w2i):
     unknown = "unk"
+    #print("make_target: word=", word)
     if word in w2i:
         return torch.LongTensor([w2i[word]])
     else:
@@ -173,6 +176,8 @@ def test(testFile, model):
     f = open(trainFile, 'r')
     text = f.read()
     word_list = []
+    text = text.split(" ")
+
     for word in text:
         # Continue until we see at least conext_size words
         if len(word_list) < CONTEXT_SIZE:
@@ -198,19 +203,20 @@ def test(testFile, model):
     return tot_loss
 
 
-def train(R, trainFile, w2i, epochs=30, lr=0.01):
+def train(R, trainFile, w2i, epochs=300, lr=0.01):
     """Train model with trainFile"""
     model = LBL(VOCAB_SIZE, HIDDEN_LAYER_SIZE, CONTEXT_SIZE, R)
     model.train()
     loss_function = nn.NLLLoss()
     optimizer = optim.SGD(model.get_train_parameters(), lr = 0.01)
-
-    for epoch in range(30):
+    loss_lst = []
+    for epoch in range(epochs):
         with open(trainFile, 'r') as f:
             text = f.read()
             word_list = []
             i = 0
             total_loss = 0
+            text = text.split(" ")
             for word in text:
                 i += 1
                 if i % 1000 == 0:
@@ -232,7 +238,9 @@ def train(R, trainFile, w2i, epochs=30, lr=0.01):
 
                 # Step 4. Compute loss, gradients and update parameters
                 loss = loss_function(log_probs, target)
-                print("loss intermediate=", loss)
+                #print("loss intermediate=", loss)
+                #print("log_probs=", log_probs, " sum=", torch.sum(torch.abs(log_probs)))
+                #print("target=", target)
                 total_loss += loss.data.numpy()[0]
                 loss.backward()
                 optimizer.step()
@@ -240,9 +248,13 @@ def train(R, trainFile, w2i, epochs=30, lr=0.01):
                 # Update the context vector
                 word_list.pop(0)
                 word_list.append(word)
-        print(total_loss)
+        print("total_lost=",total_loss)
+        loss_lst.append(total_loss)
+        if epoch % 10 == 0:
+            plt.plot(range(len(loss_lst)), loss_lst)
+            plt.show()
 
-    return model
+    return model, loss_lst
 
 
 # Load vector representation of words (GLOVE pretrained)
@@ -258,6 +270,8 @@ print (VOCAB_SIZE)
 R, w2i, i2w = makeVecRepresentationMatrix(trainFile, word2vec, VOCAB_SIZE)
 
 print("training...")
-model = train(R, trainFile, w2i)
+model, loss = train(R, trainFile, w2i)
+plt.plot(range(len(loss)), loss)
+plt.show()
 test(testFile, model)
 
