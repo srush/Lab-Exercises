@@ -105,7 +105,9 @@ class LBL(nn.Module):
 
     def __init__(self, glove_weight, vocab_size, hid_layer_size, context_size, R):
         super(LBL, self).__init__()
-        
+        # init configuration
+        self.vocab_size = vocab_size
+        self.hid_layer_size = self.hid_layer_size
         # embedding layers
         self.word_embeds = nn.Embedding(vocab_size, hid_layer_size)
         # Weight matrix, inputs to hidden layer
@@ -116,11 +118,9 @@ class LBL(nn.Module):
         self.init_weight(glove_weight)
 
     def init_weight(self, glove_weight):
-    	# assert 
-        self.word_embeds.weight.data.copy_(torch.FloatTensor(glove_weight).cuda())
-        # NB(demi): change this for trainable OOV one-hot
+    	assert(glove.size() == (self.vocab_size, self.hid_layer_size))
+        self.word_embeds.weight.data.copy_(torch.FloatTensor(glove_weight))
         self.word_embeds.weight.requires_grad = False
-
 
     def forward(self, context_vect):      
         return F.log_softmax(pytorch.mm(R, self.C(context_vect)) + self.bias)
@@ -139,7 +139,7 @@ def make_target(word, dictionary):
 def print_params(model):
     for param in model.parameters():
         print(param)
-model = LBL(VOCAB_SIZE, HIDDEN_LAYER_SIZE, CONTEXT_SIZE, R)
+model = LBL(glove_weight, VOCAB_SIZE, HIDDEN_LAYER_SIZE, CONTEXT_SIZE, R)
 
 
 loss_function = nn.NLLLoss() 
