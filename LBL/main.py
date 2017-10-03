@@ -1,3 +1,5 @@
+from __future__ import print_function
+
 import torch
 import torch.autograd as autograd
 import torch.nn as nn
@@ -5,6 +7,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 import re
+
 
 trainFile = "train.txt"
 gloveModel = "glove.6B.50d.txt"
@@ -71,13 +74,13 @@ def getVocabSize(trainFile):
             
 
 # Load vector representation of words (GLOVE pretrained)
-model = loadGloveModel(gloveModel)
+glove = loadGloveModel(gloveModel)
 # dictionary: mapping words to vectors
 
 # Clean training data
 prepareTrainData(trainFile)
-deleteNewWords(trainFile, model)
-assert(0 == len(checkWordsInTrain(trainFile, model)))
+deleteNewWords(trainFile, glove)
+assert(0 == len(checkWordsInTrain(trainFile, glove)))
 
 print(getVocabSize(trainFile))
 
@@ -107,11 +110,11 @@ CONTEXT_SIZE = 5
 
 class LBL(nn.Module):  
 
-    def __init__(self, gvocab_size, hid_layer_size, context_size, R):
+    def __init__(self, vocab_size, hid_layer_size, context_size, R):
         super(LBL, self).__init__()
         # init configuration
         self.vocab_size = vocab_size
-        self.hid_layer_size = self.hid_layer_size
+        self.hid_layer_size = hid_layer_size
         # embedding layers
         self.word_embeds = nn.Embedding(vocab_size, hid_layer_size)
         # Weight matrix, d to hidden layer
@@ -120,16 +123,23 @@ class LBL(nn.Module):
         self.bias = nn.Parameter(torch.ones(vocab_size))
 
         self.init_weight(R)
+    
+    def get_train_parameters(self):
+        params = []
+        for param in self.parameters():
+            if param.requires_grad == True:
+                params.append(param)
+        return params
 
     def init_weight(self, glove_weight):
-    	assert(glove.size() == (self.vocab_size, self.hid_layer_size))
+    	assert(glove_weight.size() == (self.vocab_size, self.hid_layer_size))
         self.word_embeds.weight.data.copy_(glove_weight)
         self.word_embeds.weight.requires_grad = False
 
     def forward(self, context_vect):      
         return F.log_softmax(pytorch.mm(R, self.C(context_vect)) + self.bias)
 
-def make_context_vector(wordlist): # TODO: change this
+def make_context_vector(wordlist, w2i): # TODO: change this
 
     embeddinglist = []
     for word in wordlist:
@@ -147,50 +157,15 @@ def print_params(model):
 
 def test(testFile, model):
     """Return - log likelihood of the training data set base on the model"""
+    print("not implemented")
 
-model = LBL(glove_weight, VOCAB_SIZE, HIDDEN_LAYER_SIZE, CONTEXT_SIZE, R)
-
-
-loss_function = nn.NLLLoss() 
-optimizer = optim.SGD(model.parameters(), lr = 0.01)
-
-
-for epoch in range(30):
-    f = open(trainFile, 'r')
-    text = f.read()
-    word_list = []
-    tot_loss = 0
-    for word in text:
-        # Continue until we see at least conext_size words
-        if len(word_list) < CONTEXT_SIZE:
-            word_list.append(word)
-            continue
         
-        # Step 1. Get intput and target
-        context_vect = autograd.Variable(make_context_vector(word_list, glove))
-        target = autograd.Variable(make_target(word))
-        
-        # Step 3. Run forward pass
-        log_probs = model(context_vect).view(1, -1)
-        
-        # Step 3. Compute loss
-        loss = loss_function(log_probs, target)
-        
-        # Step 4. Update total loss
-        tot_loss += loss
-
-        # Update the context vector
-        word_list.pop(0)
-        word_list.append(word)
-
-    return tot_loss
-        
-def train(R, trainFile, epochs=30, lr=0.01):
+def train(R, trainFile, w2i, epochs=30, lr=0.01):
     """Train model with trainFile"""
-    model = LBL(glove_weight, VOCAB_SIZE, HIDDEN_LAYER_SIZE, CONTEXT_SIZE, R)
+    model = LBL(VOCAB_SIZE, HIDDEN_LAYER_SIZE, CONTEXT_SIZE, R)
 
     loss_function = nn.NLLLoss() 
-    optimizer = optim.SGD(model.parameters(), lr = 0.01)
+    optimizer = optim.SGD(model.get_train_parameters(), lr = 0.01)
 
     for epoch in range(30):
         f = open(trainFile, 'r')
@@ -206,7 +181,7 @@ def train(R, trainFile, epochs=30, lr=0.01):
             model.zero_grad()
             
             # Step 2. Get intput and target
-            context_vect = autograd.Variable(make_context_vector(word_list, glove))
+            context_vect = autograd.Variable(make_context_vector(word_list, w2i))
             target = autograd.Variable(make_target(word))
             
             # Step 3. Run forward pass
@@ -222,3 +197,6 @@ def train(R, trainFile, epochs=30, lr=0.01):
             word_list.append(word)
 
     return model 
+
+print("training")
+train(R, trainFile, w2i)
