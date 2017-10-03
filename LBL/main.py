@@ -12,6 +12,7 @@ HIDDEN_LAYER_SIZE = 50
 CONTEXT_SIZE = 5
 
 trainFile = "train.txt"
+testFile = "test.txt"
 gloveModel = "glove.6B.50d.txt"
 VEC_SIZE = 50
 
@@ -63,7 +64,7 @@ def deleteNewWords(trainFile, dictionary):
     outputFile = open(trainFile, 'w')
     for line in lines:
         for word in delete_list:
-            line = line.replace(word, "unk")
+            line = line.replace(word, "")
         outputFile.write(line)
     outputFile.close()
 
@@ -78,6 +79,7 @@ def getVocabSize(trainFile):
 def makeVecRepresentationMatrix(trainFile, word2vec, vocab_size):
     """Construct a tensor matrix with a vector representation of the words
     in the vocab"""
+    unknown = "unk"
     R = torch.FloatTensor(vocab_size, VEC_SIZE)
     with open(trainFile, 'r') as f:
         # lookup table
@@ -87,6 +89,8 @@ def makeVecRepresentationMatrix(trainFile, word2vec, vocab_size):
         for line in f:
             for word in line.split():
                 if word not in d:
+                    if word not in word2vec:
+                        continue
                     d[word] = 1
                     R[i] = torch.FloatTensor(word2vec[word])
                     w2i[word] = i
@@ -183,14 +187,14 @@ def test(testFile, model):
 
         # Step 3. Compute loss
         loss = loss_function(log_probs, target)
-        tot_loss += loss
+        tot_loss += loss.data.numpy()[0]
 
         # Update the context vector
         word_list.pop(0)
         word_list.append(word)
 
     f.close()
-    return tot_loss.data
+    return tot_loss
 
 
 def train(R, trainFile, w2i, epochs=30, lr=0.01):
@@ -229,13 +233,12 @@ def train(R, trainFile, w2i, epochs=30, lr=0.01):
                 loss = loss_function(log_probs, target)
                 loss.backward()
                 optimizer.step()
-                total_loss += loss
-                print(total_loss.data)
+                total_loss += loss.data.numpy()[0]
 
                 # Update the context vector
                 word_list.pop(0)
                 word_list.append(word)
-        print(total_loss.data)
+        print(total_loss)
 
     return model
 
@@ -246,13 +249,13 @@ word2vec = loadGloveModel(gloveModel)
 
 # Clean training data
 prepareTrainData(trainFile)
-deleteNewWords(trainFile, word2vec)
-# checks if we preprocessing went well
-assert(0 == len(checkWordsInTrain(trainFile, word2vec)))
+
 # vocab size including unknown
 VOCAB_SIZE = getVocabSize(trainFile) + 1 # +1 unk
 print (VOCAB_SIZE)
 R, w2i, i2w = makeVecRepresentationMatrix(trainFile, word2vec, VOCAB_SIZE)
 
 print("training...")
-train(R, trainFile, w2i)
+model = train(R, trainFile, w2i)
+test(testFile, model)
+
