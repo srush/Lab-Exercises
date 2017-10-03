@@ -9,17 +9,18 @@ import re
 trainFile = "train.txt"
 gloveModel = "glove.6B.50d.txt"
 
+
 def loadGloveModel(gloveFile):
     print ("Loading Glove Model")
     f = open(gloveFile,'r')
-    model = {}
+    model, w2i = {}, {}
     for line in f:
         splitLine = line.split()
         word = splitLine[0]
         embedding = np.array([float(val) for val in splitLine[1:]])
         model[word] = embedding
     print ("Done.",len(model)," words loaded!")
-    return model
+    return  model, w2i
 
 def checkWordsInTrain(trainFile, dictionary):
     """ return list of words in training data that are not in dictionary"""
@@ -102,12 +103,24 @@ CONTEXT_SIZE = 5
 
 class LBL(nn.Module):  
 
-    def __init__(self, vocab_size, hid_layer_size, context_size, R):
+    def __init__(self, glove_weight, vocab_size, hid_layer_size, context_size, R):
         super(LBL, self).__init__()
+        
+        # embedding layers
+        self.word_embeds = nn.Embedding(vocab_size, hid_layer_size)
         # Weight matrix, inputs to hidden layer
         self.C = nn.Linear(hid_layer_size * context_size, hid_layer_size, bias=False)
         # Bias in softmax layer
         self.bias = nn.Parameter(torch.ones(vocab_size))
+
+        self.init_weight(glove_weight)
+
+    def init_weight(self, glove_weight):
+    	# assert 
+        self.word_embeds.weight.data.copy_(torch.FloatTensor(glove_weight).cuda())
+        # NB(demi): change this for trainable OOV one-hot
+        self.word_embeds.weight.requires_grad = False
+
 
     def forward(self, context_vect):      
         return F.log_softmax(pytorch.mm(R, self.C(context_vect)) + self.bias)
@@ -152,7 +165,7 @@ for epoch in range(30):
         target = autograd.Variable(make_target(word))
         
         # Step 3. Run forward pass
-        log_probs = model(context_vect)
+        log_probs = model(context_vect).view(1, -1)
         
         # Step 4. Compute loss, gradients and update parameters
         loss = loss_function(log_probs, target)
