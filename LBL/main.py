@@ -13,20 +13,15 @@ gloveModel = "glove.6B.50d.txt"
 def loadGloveModel(gloveFile):
     print ("Loading Glove Model")
     f = open(gloveFile,'r')
-    glove_weight = np.array([])
-    i2w, w2i = {}, {}
-    vocab_size = 0
+    model = {}
     for line in f:
         splitLine = line.split()
         word = splitLine[0]
         embedding = np.array([float(val) for val in splitLine[1:]])
-        glove_weight = np.append(glove_weight, embedding)
-        i2w[vocab_size] = word
-        w2i[word] = vocab_size
-        vocab_size += 1
+        model[word] = embedding
 
-    print ("Done.",vocab_size," words loaded!")
-    return  glove_weight, i2w, w2i
+    print ("Done.",len(model)," words loaded!")
+    return  model
 
 def checkWordsInTrain(trainFile, dictionary):
     """ return list of words in training data that are not in dictionary"""
@@ -76,13 +71,13 @@ def getVocabSize(trainFile):
             
 
 # Load vector representation of words (GLOVE pretrained)
-glove_weight, i2w, w2i = loadGloveModel(gloveModel)
+model = loadGloveModel(gloveModel)
 # dictionary: mapping words to vectors
 
 # Clean training data
 prepareTrainData(trainFile)
-deleteNewWords(trainFile, w2i)
-assert(0 == len(checkWordsInTrain(trainFile, w2i)))
+deleteNewWords(trainFile, model)
+assert(0 == len(checkWordsInTrain(trainFile, model)))
 
 print(getVocabSize(trainFile))
 
@@ -92,16 +87,19 @@ def makeVecRepresentationMatrix(trainFile, dictionary):
     R = torch.FloatTensor(getVocabSize(trainFile), 50)
     f = open(trainFile, 'r')
     d = {}
+    w2i, i2w = {}, {}
     i = 0
     for line in f:
         for word in line.split():
             if word not in d:
                 d[word] = 1
                 R[i] = torch.FloatTensor(dictionary[word])
+                w2i[word] = i
+                i2w[i] = word
                 i += 1
-    return R
+    return R, w2i, i2w
 
-R = makeVecRepresentationMatrix(trainFile, glove)
+R, w2i, i2w = makeVecRepresentationMatrix(trainFile, glove)
 
 VOCAB_SIZE = getVocabSize(trainFile)
 HIDDEN_LAYER_SIZE = 50
@@ -109,23 +107,23 @@ CONTEXT_SIZE = 5
 
 class LBL(nn.Module):  
 
-    def __init__(self, glove_weight, vocab_size, hid_layer_size, context_size, R):
+    def __init__(self, gvocab_size, hid_layer_size, context_size, R):
         super(LBL, self).__init__()
         # init configuration
         self.vocab_size = vocab_size
         self.hid_layer_size = self.hid_layer_size
         # embedding layers
         self.word_embeds = nn.Embedding(vocab_size, hid_layer_size)
-        # Weight matrix, inputs to hidden layer
+        # Weight matrix, d to hidden layer
         self.C = nn.Linear(hid_layer_size * context_size, hid_layer_size, bias=False)
         # Bias in softmax layer
         self.bias = nn.Parameter(torch.ones(vocab_size))
 
-        self.init_weight(glove_weight)
+        self.init_weight(R)
 
     def init_weight(self, glove_weight):
     	assert(glove.size() == (self.vocab_size, self.hid_layer_size))
-        self.word_embeds.weight.data.copy_(torch.FloatTensor(glove_weight))
+        self.word_embeds.weight.data.copy_(glove_weight)
         self.word_embeds.weight.requires_grad = False
 
     def forward(self, context_vect):      
@@ -149,6 +147,16 @@ def print_params(model):
 
 def test(testFile, model):
     """Return - log likelihood of the training data set base on the model"""
+
+model = LBL(glove_weight, VOCAB_SIZE, HIDDEN_LAYER_SIZE, CONTEXT_SIZE, R)
+
+
+loss_function = nn.NLLLoss() 
+optimizer = optim.SGD(model.parameters(), lr = 0.01)
+
+
+for epoch in range(30):
+>>>>>>> upstream/master
     f = open(trainFile, 'r')
     text = f.read()
     word_list = []
