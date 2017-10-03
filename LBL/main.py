@@ -118,10 +118,12 @@ class LBL(nn.Module):
         # Weight matrix, d to hidden layer
         self.C = nn.Linear(hid_layer_size * context_size, hid_layer_size, bias=False)
         # Bias in softmax layer
-        self.bias = nn.Parameter(torch.ones(vocab_size)).view(self.vocab_size, 1)
+        self.R = nn.Linear(hid_layer_size, context_size)
+        
+        #self.bias = nn.Parameter(torch.ones(vocab_size)).view(self.vocab_size, 1)
 
         self.init_weight(R)
-        self.R = autograd.Variable(R)
+        #self.R = autograd.Variable(R)
 
     def get_train_parameters(self):
         params = []
@@ -133,8 +135,9 @@ class LBL(nn.Module):
     def init_weight(self, glove_weight):
         assert(glove_weight.size() == (self.vocab_size, self.hid_layer_size))
         self.word_embeds.weight.data.copy_(glove_weight)
-        self.word_embeds.weight.requires_grad = False
-
+        #self.word_embeds.weight.requires_grad = False
+        self.R.weight = self.word_embeds.weight  
+        
     def forward(self, context_vect):
         context_vect = self.word_embeds(context_vect)
         context_vect = context_vect.view(1, self.context_size * self.hid_layer_size)
