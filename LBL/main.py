@@ -168,6 +168,7 @@ def test(testFile, model):
     """Return - log likelihood of the training data set base on the model"""
     loss_function = nn.NLLLoss()
     tot_loss = 0
+    model.eval()
 
     f = open(trainFile, 'r')
     text = f.read()
@@ -200,7 +201,7 @@ def test(testFile, model):
 def train(R, trainFile, w2i, epochs=30, lr=0.01):
     """Train model with trainFile"""
     model = LBL(VOCAB_SIZE, HIDDEN_LAYER_SIZE, CONTEXT_SIZE, R)
-
+    model.train()
     loss_function = nn.NLLLoss()
     optimizer = optim.SGD(model.get_train_parameters(), lr = 0.01)
 
@@ -220,7 +221,7 @@ def train(R, trainFile, w2i, epochs=30, lr=0.01):
                     continue
 
                 # Step 1. clear out gradients
-                model.zero_grad()
+                optimizer.zero_grad()
 
                 # Step 2. Get intput and target
                 context_vect = autograd.Variable(make_context_vector(word_list, w2i))
@@ -231,9 +232,10 @@ def train(R, trainFile, w2i, epochs=30, lr=0.01):
 
                 # Step 4. Compute loss, gradients and update parameters
                 loss = loss_function(log_probs, target)
+                print("loss intermediate=", loss)
+                total_loss += loss.data.numpy()[0]
                 loss.backward()
                 optimizer.step()
-                total_loss += loss.data.numpy()[0]
 
                 # Update the context vector
                 word_list.pop(0)
