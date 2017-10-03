@@ -175,7 +175,35 @@ def print_params(model):
 
 def test(testFile, model):
     """Return - log likelihood of the training data set base on the model"""
-    print("not implemented")
+    loss_function = nn.NLLLoss() 
+    tot_loss = 0
+
+    f = open(trainFile, 'r')
+    text = f.read()
+    word_list = []
+    for word in text:
+        # Continue until we see at least conext_size words
+        if len(word_list) < CONTEXT_SIZE:
+            word_list.append(word)
+            continue
+        
+        # Step 1. Get intput and target
+        context_vect = autograd.Variable(make_context_vector(word_list, w2i))
+        target = autograd.Variable(make_target(word, w2i)).view(1)
+        
+        # Step 2. Run forward pass
+        log_probs = model(context_vect)
+
+        # Step 3. Compute loss
+        loss = loss_function(log_probs, target)
+        tot_loss += loss
+
+        # Update the context vector
+        word_list.pop(0)
+        word_list.append(word)
+
+    f.close()
+    return tot_loss
 
         
 def train(R, trainFile, w2i, epochs=30, lr=0.01):
@@ -217,7 +245,7 @@ def train(R, trainFile, w2i, epochs=30, lr=0.01):
             # Update the context vector
             word_list.pop(0)
             word_list.append(word)
-
+    f.close()
     return model 
 
 print("training")
