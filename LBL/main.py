@@ -145,6 +145,9 @@ def print_params(model):
     for param in model.parameters():
         print(param)
 
+def test(testFile, model):
+    """Return - log likelihood of the training data set base on the model"""
+
 model = LBL(glove_weight, VOCAB_SIZE, HIDDEN_LAYER_SIZE, CONTEXT_SIZE, R)
 
 
@@ -153,31 +156,70 @@ optimizer = optim.SGD(model.parameters(), lr = 0.01)
 
 
 for epoch in range(30):
+>>>>>>> upstream/master
     f = open(trainFile, 'r')
     text = f.read()
     word_list = []
+    tot_loss = 0
     for word in text:
         # Continue until we see at least conext_size words
         if len(word_list) < CONTEXT_SIZE:
             word_list.append(word)
             continue
         
-        # Step 1. clear out gradients
-        model.zero_grad()
-        
-        # Step 2. Get intput and target
+        # Step 1. Get intput and target
         context_vect = autograd.Variable(make_context_vector(word_list, glove))
         target = autograd.Variable(make_target(word))
         
         # Step 3. Run forward pass
         log_probs = model(context_vect).view(1, -1)
         
-        # Step 4. Compute loss, gradients and update parameters
+        # Step 3. Compute loss
         loss = loss_function(log_probs, target)
-        loss.backward()
-        optimizer.step()
         
+        # Step 4. Update total loss
+        tot_loss += loss
+
         # Update the context vector
         word_list.pop(0)
         word_list.append(word)
+
+    return tot_loss
         
+def train(R, trainFile, epochs=30, lr=0.01):
+    """Train model with trainFile"""
+    model = LBL(glove_weight, VOCAB_SIZE, HIDDEN_LAYER_SIZE, CONTEXT_SIZE, R)
+
+    loss_function = nn.NLLLoss() 
+    optimizer = optim.SGD(model.parameters(), lr = 0.01)
+
+    for epoch in range(30):
+        f = open(trainFile, 'r')
+        text = f.read()
+        word_list = []
+        for word in text:
+            # Continue until we see at least conext_size words
+            if len(word_list) < CONTEXT_SIZE:
+                word_list.append(word)
+                continue
+            
+            # Step 1. clear out gradients
+            model.zero_grad()
+            
+            # Step 2. Get intput and target
+            context_vect = autograd.Variable(make_context_vector(word_list, glove))
+            target = autograd.Variable(make_target(word))
+            
+            # Step 3. Run forward pass
+            log_probs = model(context_vect)
+            
+            # Step 4. Compute loss, gradients and update parameters
+            loss = loss_function(log_probs, target)
+            loss.backward()
+            optimizer.step()
+            
+            # Update the context vector
+            word_list.pop(0)
+            word_list.append(word)
+
+    return model 
