@@ -101,13 +101,13 @@ def makeVecRepresentationMatrix(trainFile, dictionary):
                 i2w[i] = word
                 i += 1
     R[i] = torch.FloatTensor(dictionary["unk"])
-    w2i[word] = i
-    i2w[i]
+    w2i["unk"] = i
+    i2w[i] = "unk"
     return R, w2i, i2w
 
 R, w2i, i2w = makeVecRepresentationMatrix(trainFile, glove)
 
-VOCAB_SIZE = getVocabSize(trainFile)
+VOCAB_SIZE = getVocabSize(trainFile) + 1 # +1 unk
 HIDDEN_LAYER_SIZE = 50
 CONTEXT_SIZE = 5
 
@@ -117,15 +117,19 @@ class LBL(nn.Module):
         super(LBL, self).__init__()
         # init configuration
         self.vocab_size = vocab_size
+        self.context_size = context_size
+        print("vocab_size=", vocab_size)
+        print("R.shape=", R.size())
         self.hid_layer_size = hid_layer_size
         # embedding layers
         self.word_embeds = nn.Embedding(vocab_size, hid_layer_size)
         # Weight matrix, d to hidden layer
         self.C = nn.Linear(hid_layer_size * context_size, hid_layer_size, bias=False)
         # Bias in softmax layer
-        self.bias = nn.Parameter(torch.ones(vocab_size))
+        self.bias = nn.Parameter(torch.ones(vocab_size)).view(self.vocab_size, 1)
 
         self.init_weight(R)
+        self.R = autograd.Variable(R)
     
     def get_train_parameters(self):
         params = []
@@ -139,8 +143,13 @@ class LBL(nn.Module):
         self.word_embeds.weight.data.copy_(glove_weight)
         self.word_embeds.weight.requires_grad = False
 
-    def forward(self, context_vect):      
-        return F.log_softmax(pytorch.mm(R, self.C(context_vect)) + self.bias)
+    def forward(self, context_vect):   
+        context_vect = self.word_embeds(context_vect)
+        context_vect = context_vect.view(1, self.context_size * self.hid_layer_size)
+        model_vect = self.C(context_vect).view(self.hid_layer_size, 1)
+        final_vect = torch.mm(self.R, model_vect) + self.bias
+        final_vect = F.log_softmax(final_vect).view(1, self.vocab_size)
+        return final_vect
 
 def make_context_vector(wordlist, w2i): # TODO: change this
     unknown = "unk"
@@ -151,7 +160,6 @@ def make_context_vector(wordlist, w2i): # TODO: change this
         else:
             embeddinglist.append(w2i[word])
     vec = torch.LongTensor(embeddinglist)
-    # 
     return vec #vec.view(1,-1)
 
 def make_target(word, w2i):  # TODO:change this
@@ -181,7 +189,11 @@ def train(R, trainFile, w2i, epochs=30, lr=0.01):
         f = open(trainFile, 'r')
         text = f.read()
         word_list = []
+        i = 0
         for word in text:
+            i += 1
+            if i % 1000 == 0:
+                print("epoch=%d, word=%d/%d\n" % (epoch, i, len(text)))
             # Continue until we see at least conext_size words
             if len(word_list) < CONTEXT_SIZE:
                 word_list.append(word)
@@ -192,11 +204,11 @@ def train(R, trainFile, w2i, epochs=30, lr=0.01):
             
             # Step 2. Get intput and target
             context_vect = autograd.Variable(make_context_vector(word_list, w2i))
-            target = autograd.Variable(make_target(word, w2i))
+            target = autograd.Variable(make_target(word, w2i)).view(1)
             
             # Step 3. Run forward pass
             log_probs = model(context_vect)
-            
+
             # Step 4. Compute loss, gradients and update parameters
             loss = loss_function(log_probs, target)
             loss.backward()
