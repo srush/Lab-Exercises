@@ -10,10 +10,11 @@ import re
 
 HIDDEN_LAYER_SIZE = 50
 CONTEXT_SIZE = 5
+VEC_SIZE = 50
 
 trainFile = "train.txt"
+testFile = "test.txt"
 gloveModel = "glove.6B.50d.txt"
-VEC_SIZE = 50
 
 
 def loadGloveModel(gloveFile):
