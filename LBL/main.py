@@ -9,17 +9,24 @@ import re
 trainFile = "train.txt"
 gloveModel = "glove.6B.50d.txt"
 
+
 def loadGloveModel(gloveFile):
     print ("Loading Glove Model")
     f = open(gloveFile,'r')
-    model = {}
+    glove_weight = np.array([])
+    i2w, w2i = {}, {}
+    vocab_size = 0
     for line in f:
         splitLine = line.split()
         word = splitLine[0]
         embedding = np.array([float(val) for val in splitLine[1:]])
-        model[word] = embedding
-    print ("Done.",len(model)," words loaded!")
-    return model
+        glove_weight = np.append(glove_weight, embedding)
+        i2w[vocab_size] = word
+        w2i[word] = vocab_size
+        vocab_size += 1
+
+    print ("Done.",vocab_size," words loaded!")
+    return  glove_weight, i2w, w2i
 
 def checkWordsInTrain(trainFile, dictionary):
     """ return list of words in training data that are not in dictionary"""
@@ -69,13 +76,13 @@ def getVocabSize(trainFile):
             
 
 # Load vector representation of words (GLOVE pretrained)
-glove = loadGloveModel(gloveModel)
+glove_weight, i2w, w2i = loadGloveModel(gloveModel)
 # dictionary: mapping words to vectors
 
 # Clean training data
 prepareTrainData(trainFile)
-deleteNewWords(trainFile, glove)
-assert(0 == len(checkWordsInTrain(trainFile, glove)))
+deleteNewWords(trainFile, w2i)
+assert(0 == len(checkWordsInTrain(trainFile, w2i)))
 
 print(getVocabSize(trainFile))
 
@@ -102,26 +109,39 @@ CONTEXT_SIZE = 5
 
 class LBL(nn.Module):  
 
-    def __init__(self, vocab_size, hid_layer_size, context_size, R):
+    def __init__(self, glove_weight, vocab_size, hid_layer_size, context_size, R):
         super(LBL, self).__init__()
+        # init configuration
+        self.vocab_size = vocab_size
+        self.hid_layer_size = self.hid_layer_size
+        # embedding layers
+        self.word_embeds = nn.Embedding(vocab_size, hid_layer_size)
         # Weight matrix, inputs to hidden layer
         self.C = nn.Linear(hid_layer_size * context_size, hid_layer_size, bias=False)
         # Bias in softmax layer
         self.bias = nn.Parameter(torch.ones(vocab_size))
 
+        self.init_weight(glove_weight)
+
+    def init_weight(self, glove_weight):
+    	assert(glove.size() == (self.vocab_size, self.hid_layer_size))
+        self.word_embeds.weight.data.copy_(torch.FloatTensor(glove_weight))
+        self.word_embeds.weight.requires_grad = False
+
     def forward(self, context_vect):      
         return F.log_softmax(pytorch.mm(R, self.C(context_vect)) + self.bias)
 
-def make_context_vector(wordlist, dictionary):
+def make_context_vector(wordlist): # TODO: change this
+
     embeddinglist = []
     for word in wordlist:
-        embeddinglist += dictionary[word]
-    vec = torch.FloatTensor(embeddinglist)
+        embeddinglist.append(w2i[word])
+    vec = torch.LongTensor(embeddinglist)
     # 
     return vec #vec.view(1,-1)
 
-def make_target(word, dictionary):
-    return torch.FlotTensor(dictionary[word])
+def make_target(word):  # TODO:change this
+    return torch.LongTensor([w2i[word]])
 
 def print_params(model):
     for param in model.parameters():
@@ -143,8 +163,8 @@ def test(testFile, model):
         context_vect = autograd.Variable(make_context_vector(word_list, glove))
         target = autograd.Variable(make_target(word))
         
-        # Step 2. Run forward pass
-        log_probs = model(context_vect)
+        # Step 3. Run forward pass
+        log_probs = model(context_vect).view(1, -1)
         
         # Step 3. Compute loss
         loss = loss_function(log_probs, target)
@@ -158,9 +178,9 @@ def test(testFile, model):
 
     return tot_loss
         
-def train(trainFile, epochs=30, lr=0.01):
+def train(R, trainFile, epochs=30, lr=0.01):
     """Train model with trainFile"""
-    model = LBL(VOCAB_SIZE, HIDDEN_LAYER_SIZE, CONTEXT_SIZE, R)
+    model = LBL(glove_weight, VOCAB_SIZE, HIDDEN_LAYER_SIZE, CONTEXT_SIZE, R)
 
     loss_function = nn.NLLLoss() 
     optimizer = optim.SGD(model.parameters(), lr = 0.01)
